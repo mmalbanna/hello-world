@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function hasProfile() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function role() {
+      return hasProfile() ? profile().role : 'none';
+    }
+    function isAdmin() {
+      return signedIn() && role() == 'admin';
+    }
+    function isEditor() {
+      return signedIn() && (role() == 'admin' || role() == 'lead');
+    }
+    function isViewer() {
+      return signedIn() && (role() == 'admin' || role() == 'lead' || role() == 'viewer');
+    }
+
+    // Every signed-in person with a profile may read the plan.
+    match /projects/{id}   { allow read: if isViewer(); allow write: if isAdmin(); }
+    match /people/{id}     { allow read: if isViewer(); allow write: if isAdmin(); }
+    match /settings/{id}   { allow read: if isViewer(); allow write: if isAdmin(); }
+    match /tasks/{id}      { allow read: if isViewer(); allow write: if isEditor(); }
+    match /allocations/{id}{ allow read: if isViewer(); allow write: if isEditor(); }
+    match /activity/{id}   { allow read: if isViewer(); allow create: if isEditor(); allow update, delete: if isAdmin(); }
+
+    // User profiles: a person may create their own profile as a viewer on
+    // first sign-in and update their own display name; only an admin can
+    // change roles. The FIRST admin is set once in the Firebase console
+    // (users/<uid>.role = "admin"), see README.
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isViewer());
+      allow create: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.role == 'viewer'
+                    && request.resource.data.email == request.auth.token.email;
+      allow update: if isAdmin()
+                    || (signedIn() && request.auth.uid == uid
+                        && request.resource.data.role == resource.data.role
+                        && request.resource.data.email == resource.data.email);
+      allow delete: if isAdmin();
+    }
+  }
+}
