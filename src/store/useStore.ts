@@ -33,7 +33,9 @@ import {
   DEFAULT_SETTINGS,
   type ActivityEntry,
   type Allocation,
+  type Loan,
   type Person,
+  type PlanEvent,
   type Project,
   type Settings,
   type Task,
@@ -57,6 +59,8 @@ interface State {
   allocRange: { start: string; end: string }
   settings: Settings
   activity: ActivityEntry[]
+  loans: Loan[]
+  events: PlanEvent[]
   users: UserProfile[]
   loaded: { people: boolean; projects: boolean; tasks: boolean; allocations: boolean; settings: boolean }
   online: boolean
@@ -106,11 +110,14 @@ export const useStore = create<State>((set, get) => ({
   tasks: [],
   allocations: {},
   allocRange: (() => {
+    // wide enough for the overview (what happened / what is next) without resubscribing
     const start = weekStartKey(todayKey(), DEFAULT_SETTINGS)
-    return { start: shiftKey(start, -7), end: shiftKey(start, 35) }
+    return { start: shiftKey(start, -56), end: shiftKey(start, 70) }
   })(),
   settings: DEFAULT_SETTINGS,
   activity: [],
+  loans: [],
+  events: [],
   users: [],
   loaded: { people: false, projects: false, tasks: false, allocations: false, settings: false },
   online: typeof navigator !== 'undefined' ? navigator.onLine : true,
@@ -252,6 +259,16 @@ function subscribeAll(set: Set, get: Get) {
       lastActivitySeen = newest?.id ?? ''
       set({ activity: list })
     }, onErr('activity')),
+  )
+  subs.push(
+    onSnapshot(query(collection(db, 'loans'), orderBy('createdAt', 'desc'), limit(300)), (s) => {
+      set({ loans: s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Loan, 'id'>) })) })
+    }, onErr('loans')),
+  )
+  subs.push(
+    onSnapshot(query(collection(db, 'events'), orderBy('at', 'desc'), limit(400)), (s) => {
+      set({ events: s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<PlanEvent, 'id'>) })) })
+    }, onErr('events')),
   )
   // users list is only readable by viewers+; admins manage it
   subs.push(

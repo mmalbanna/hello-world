@@ -9,7 +9,7 @@ import { hexToRgb } from '../lib/colors'
 let fontState: { name: string; loaded: boolean } | null = null
 
 /** Embed Aptos if the TTF files were placed in public/fonts (see README); otherwise Helvetica. */
-async function ensureFont(doc: jsPDF): Promise<string> {
+export async function ensurePdfFont(doc: jsPDF): Promise<string> {
   if (fontState) {
     if (fontState.loaded) await registerFromCache(doc)
     return fontState.name
@@ -54,7 +54,7 @@ async function fetchB64(url: string): Promise<string | null> {
 
 export async function exportPdf(plan: PlanData): Promise<{ blob: Blob; font: string }> {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-  const font = await ensureFont(doc)
+  const font = await ensurePdfFont(doc)
   doc.setProperties({ title: plan.title, author: AUTHOR, creator: AUTHOR, subject: `${plan.orgName} resource allocation ${plan.periodLabel}` })
   const pageW = doc.internal.pageSize.getWidth()
   const margin = 10

@@ -4,6 +4,9 @@ import { useStore } from '../store/useStore'
 import { upsertPerson, deletePerson, reorderPeople } from '../lib/repo'
 import { Button, Dialog, Field, Input, Select, Textarea, PageHeader, Empty, Badge, confirmDialog } from '../components/ui'
 import { PERSON_TYPE_LABEL, type Person, type PersonType } from '../lib/types'
+import { Avatar } from '../components/Avatar'
+import { fileToAvatarDataUrl } from '../lib/photo'
+import { disciplineColor } from '../lib/progress'
 
 type Form = Omit<Person, 'id' | 'order'>
 
@@ -14,7 +17,7 @@ export default function People() {
   const [busy, setBusy] = useState(false)
   const [showInactive, setShowInactive] = useState(false)
 
-  const blank = (): Form => ({ name: '', title: settings.titles[0] ?? 'BIM Modeler', discipline: settings.disciplines[0] ?? '', type: 'employee', leadId: null, email: '', active: true, notes: '' })
+  const blank = (): Form => ({ name: '', title: settings.titles[0] ?? 'BIM Modeler', discipline: settings.disciplines[0] ?? '', type: 'employee', leadId: null, email: '', active: true, notes: '', photo: null })
   const open = (p?: Person) => setEditing(p ? { id: p.id, form: { ...p } } : { form: blank() })
   const leads = people.filter((p) => /lead|manager|coordinator/i.test(p.title) || people.some((x) => x.leadId === p.id))
 
@@ -52,7 +55,7 @@ export default function People() {
             <tbody className="divide-y divide-slate-100">
               {list.map((p) => (
                 <tr key={p.id} className={p.active ? '' : 'opacity-50'}>
-                  <td className="px-3 py-2"><div className="font-medium">{p.name}</div><div className="text-xs text-slate-500 sm:hidden">{p.title}</div>{p.email && <div className="text-xs text-slate-400">{p.email}</div>}</td>
+                  <td className="px-3 py-2"><div className="flex items-center gap-2"><Avatar person={p} size={32} ring={disciplineColor(p.discipline, settings)} /><div><div className="font-medium">{p.name}</div><div className="text-xs text-slate-500 sm:hidden">{p.title}</div>{p.email && <div className="text-xs text-slate-400">{p.email}</div>}</div></div></td>
                   <td className="hidden px-3 py-2 sm:table-cell">{p.title}</td>
                   <td className="px-3 py-2">{p.discipline}</td>
                   <td className="hidden px-3 py-2 md:table-cell">{leadName(p.leadId)}</td>
@@ -78,10 +81,21 @@ export default function People() {
           const set = (patch: Partial<Form>) => setEditing({ ...editing, form: { ...f, ...patch } })
           return (
             <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <Avatar person={{ name: f.name || '?', photo: f.photo }} size={64} ring={disciplineColor(f.discipline, settings)} />
+                <div className="text-sm">
+                  <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+                    {f.photo ? 'Change photo' : 'Add photo'}
+                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; try { set({ photo: await fileToAvatarDataUrl(file) }) } catch { toast('Could not read that image', 'error') } }} />
+                  </label>
+                  {f.photo && <button type="button" className="ml-2 text-xs text-red-600 underline" onClick={() => set({ photo: null })}>Remove</button>}
+                  <div className="mt-1 text-xs text-slate-500">Shown on the sand table. Resized to a small square.</div>
+                </div>
+              </div>
               <Field label="Name"><Input value={f.name} onChange={(e) => set({ name: e.target.value })} /></Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Title"><Select value={f.title} onChange={(e) => set({ title: e.target.value })}>{[...new Set([...settings.titles, f.title])].filter(Boolean).map((t) => <option key={t} value={t}>{t}</option>)}</Select></Field>
-                <Field label="Discipline"><Select value={f.discipline} onChange={(e) => set({ discipline: e.target.value })}><option value="">—</option>{[...new Set([...settings.disciplines, f.discipline])].filter(Boolean).map((d) => <option key={d} value={d}>{d}</option>)}</Select></Field>
+                <Field label="Discipline"><Select value={f.discipline} onChange={(e) => set({ discipline: e.target.value })}><option value="">None</option>{[...new Set([...settings.disciplines, f.discipline])].filter(Boolean).map((d) => <option key={d} value={d}>{d}</option>)}</Select></Field>
                 <Field label="Type"><Select value={f.type} onChange={(e) => set({ type: e.target.value as PersonType })}>{(Object.keys(PERSON_TYPE_LABEL) as PersonType[]).map((t) => <option key={t} value={t}>{PERSON_TYPE_LABEL[t]}</option>)}</Select></Field>
                 <Field label="Team lead"><Select value={f.leadId ?? ''} onChange={(e) => set({ leadId: e.target.value || null })}><option value="">None (is a lead / reports to you)</option>{leads.filter((l) => l.id !== editing.id).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</Select></Field>
               </div>

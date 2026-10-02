@@ -69,7 +69,7 @@ export default function Settings() {
           <h2 className="font-semibold">Workspace</h2>
           <div className="mt-3 space-y-4">
             <Field label="Team / organisation name"><Input value={orgName} onChange={(e) => setOrgName(e.target.value)} /></Field>
-            <Field label="Working days" hint="Default Qatar week: Sunday to Thursday. Non-working days are greyed in the planner and skipped when filling a date range.">
+            <Field group label="Working days" hint="Default Qatar week: Sunday to Thursday. Non-working days are greyed in the planner and skipped when filling a date range.">
               <div className="flex flex-wrap gap-2">
                 {DAYS.map((d, i) => (
                   <button key={d} type="button" onClick={() => setWorkingDays((w) => (w.includes(i) ? w.filter((x) => x !== i) : [...w, i]))} className={`rounded-lg border px-3 py-1.5 text-sm ${workingDays.includes(i) ? 'border-brand bg-brand text-white' : 'border-slate-300 bg-white text-slate-700'}`}>{d}</button>

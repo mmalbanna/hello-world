@@ -17,12 +17,16 @@ Author: Motasem Albanna
 
 ## What it does
 
+- **Overview** (home page): one screen for you or management. What happened in the last 7 days (completions, interruptions with reasons, replans, loans, mobilisations), what is happening today (every task in progress with its planned-versus-actual bar and the people on it, who is available), and what is coming in the next 14 days (due dates, planned starts, loan returns, people becoming free, backlog, pipeline projects). Colour-coded project health cards on top.
+- **Sand table**: project lanes with task cards, people as photo tokens. Drag a token from the Available bench onto a task, between tasks, or back to the bench. A short sheet asks for the dates and whether this is a permanent move or a **loan with a planned return** to the previous task. Loaned tokens get a dashed amber ring; one tap returns them early or extends the loan. Tap a card to update progress, interrupt (with a reason), resume, replan the finish date, mark done, or read the task history. Add a new task inline in any lane while people keep working on the others.
+- **Progress monitoring**: each task carries planned start, planned finish and planned effort. The app computes the planned percent for today, compares it with the reported actual percent and the person-days actually spent, and colours the task: not started, on track, at risk, delayed, interrupted, done.
 - **Planner grid**: people in rows, days in columns, one task per person per working day. Drag a chip to another day or another person (touch and mouse). Tap an empty cell to assign a task for one day or a date range. Tap a chip to change the task, move it to someone else, extend it, add a note or remove it.
 - **Task palette**: drag a task straight onto a cell, or tap a task and then tap cells to assign it.
 - **Projects / Tasks / People** pages: projects with a colour each, tasks under each project, people with discipline, title, team lead and type (team member, subcontractor, supply chain).
 - **Roles**: admin (you), team lead (Raja, Gloria, Suresh … can allocate and manage tasks), viewer (everyone else, read only).
 - **Live activity log** with toast notifications when someone else changes the plan.
 - **Share the plan**: Excel (.xlsx), Word (.docx) and PDF with the allocation grid per week, people per project per day and allocation by project. On iPad and Android the buttons open the share sheet (WhatsApp, Teams, Mail). There is also a plain-text summary for chat.
+- **History and progress report** (Excel, Word, PDF): task history with planned versus actual dates and effort, planned-versus-actual snapshot, resource movements, mobilisation and demobilisation per project, loans between tasks with reasons, interruptions and delays with reasons, utilisation per person, and the full event timeline for any date range.
 - Working week Sunday to Thursday by default, with public holidays, configurable in Settings.
 
 ## One-time setup (about 15 minutes)
@@ -70,9 +74,20 @@ Any other static host works too (Firebase Hosting: `npm run build && firebase de
 3. In **Access**, set Raja, Gloria, Suresh and the other leads to **Team lead**.
 4. In **People**, enter each person's email so their own row is highlighted when they sign in.
 
+## Colour codes
+
+| Element | Meaning |
+|---|---|
+| Lane header, card left border, chip fill | Project colour (set per project) |
+| Ring around a person token | Discipline (Architectural, Structural, MEP, ...) |
+| Dashed amber ring | On loan from another task, returns on the shown date |
+| Dashed empty circle on a card | The task still needs one more person today |
+| Badge and progress bar: green / amber / red / purple / blue / grey | On track / at risk / delayed / interrupted / done / not started |
+| Black marker on the progress bar | Where the plan expects the task to be today |
+
 ## Day-to-day use
 
-- Open the **Planner**. Use the arrows or **Today** to move through weeks; choose 1 to 6 weeks of view.
+- Start on the **Overview** for the picture, then open the **Sand table** to move people. The **Calendar** is the day-by-day grid for detailed blocks. Use the arrows or **Today** to move through weeks; choose 1 to 6 weeks of view.
 - **Assign**: tap an empty cell → pick project and task → set "Until" for a block of days → Assign. Tick other people to assign them to the same task and dates.
 - **Move**: drag a chip to a different day or person. Dropping onto an occupied cell swaps the two. Hold **Alt** (desktop) or switch the toolbar to **Drag copies** to copy instead.
 - **Change**: tap a chip → Change task / Move to another person / Extend / Remove, each for this day only or for the following days of the block.
@@ -99,8 +114,11 @@ To develop against the emulators, copy `.env.example` to `.env.local` and set `V
 ```
 public/firebase-config.json   Firebase web config (edit this)
 firestore.rules               Security rules (publish these)
-src/pages/                    Planner, Projects, Tasks, People, Reports, Access, Settings, Activity
-src/components/planner/       Grid cell, chip, drag-and-drop, assign and detail dialogs, task palette
+src/pages/                    Overview, Board (sand table), Planner (calendar), Projects, Tasks, People, Reports, Access, Settings, Activity
+src/components/board/         Sand table: task card, person token, bench, move/lend sheet, task panel, person popover, quick add
+src/components/planner/       Calendar grid cell, chip, drag-and-drop, assign and detail dialogs, task palette
+src/lib/progress.ts           Planned vs actual, task health colours, working-day arithmetic
+src/export/history.ts         History and progress report builder (generic Excel/Word/PDF renderer in report.ts)
 src/lib/repo.ts               All writes to Firestore (batched, with activity log)
 src/store/useStore.ts         Live subscriptions and session state
 src/export/                   Excel, Word, PDF and plain-text exports
@@ -113,9 +131,11 @@ capacitor.config.ts           Native iOS / Android shell (optional)
 | Collection | One document per | Key fields |
 |---|---|---|
 | `projects` | project | code, name, client, colour, status |
-| `tasks` | task | projectId, name, discipline, start/end, status, priority |
-| `people` | team member / subcontractor | name, title, discipline, type, leadId, email, active |
-| `allocations` | person **and** day (`<personId>__<YYYY-MM-DD>`) | taskId, projectId, note, updatedBy |
+| `tasks` | task | projectId, name, discipline, planned start/finish, planned effort, progress %, actual start/finish, status, priority |
+| `people` | team member / subcontractor | name, title, discipline, type, leadId, email, active, photo (small inline JPEG) |
+| `allocations` | person **and** day (`<personId>__<YYYY-MM-DD>`) | taskId, projectId, note, updatedBy, loanId |
+| `loans` | tentative move of a person | fromTask, toTask, start, planned return, actual return, reason |
+| `events` | recorded change | kind (started, progress, interrupted, replanned, loan, assigned, moved, released ...), date, task, person, reason, note |
 | `users` | sign-in account | displayName, email, role |
 | `settings/general` | workspace | working days, holidays, disciplines, titles |
 | `activity` | change | who, when, what |

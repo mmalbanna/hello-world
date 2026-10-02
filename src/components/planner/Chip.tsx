@@ -11,7 +11,7 @@ export function ChipBody({ project, task, note, ghost, compact }: { project?: Pr
       style={{ background: tint(color, 0.86), borderLeftColor: color }}
     >
       <div className="flex min-w-0 flex-1 flex-col justify-center px-1.5 py-1 leading-tight">
-        <div className="truncate text-[11px] font-bold" style={{ color }}>{project?.code ?? '—'}{note ? <StickyNote className="ml-1 inline h-3 w-3 text-slate-500" /> : null}</div>
+        <div className="truncate text-[11px] font-bold" style={{ color }}>{project?.code ?? '?'}{note ? <StickyNote className="ml-1 inline h-3 w-3 text-slate-500" /> : null}</div>
         {!compact && <div className="line-clamp-2 text-[11px] text-slate-800">{task?.name ?? 'Unknown task'}</div>}
       </div>
     </div>

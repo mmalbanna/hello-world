@@ -13,6 +13,8 @@ import { TaskPalette } from '../components/planner/TaskPalette'
 import { AssignDialog, type AssignTarget } from '../components/planner/AssignDialog'
 import { DetailDialog } from '../components/planner/DetailDialog'
 import { Button, Select, Input, Spinner, Empty } from '../components/ui'
+import { Avatar } from '../components/Avatar'
+import { disciplineColor } from '../lib/progress'
 
 const LS_FILTERS = 'bimplanner.filters'
 const LS_RANGE = 'bimplanner.rangeDays'
@@ -176,7 +178,8 @@ export default function Planner() {
                           <tr key={p.id} className={me ? 'bg-sky-50' : ''}>
                             <th className={`sticky left-0 z-10 border-b border-r border-slate-200 px-2 py-1 text-left font-normal ${me ? 'bg-sky-50' : 'bg-white'}`}>
                               <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0">
+                                <Avatar person={p} size={28} ring={disciplineColor(p.discipline, settings)} className="hidden sm:flex" />
+                                <div className="min-w-0 flex-1">
                                   <div className="truncate text-sm font-semibold text-slate-900">{p.name}{!p.active && <span className="ml-1 text-xs text-slate-400">(inactive)</span>}</div>
                                   <div className="truncate text-[11px] text-slate-500">{p.title}{p.type !== 'employee' ? ` · ${PERSON_TYPE_LABEL[p.type]}` : ''}</div>
                                 </div>

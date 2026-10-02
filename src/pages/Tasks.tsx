@@ -16,7 +16,7 @@ export default function Tasks() {
   const [editing, setEditing] = useState<{ id?: string; form: Form } | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const blank = (): Form => ({ projectId: projectFilter || projects[0]?.id || '', name: '', discipline: '', startDate: null, endDate: null, status: 'open', priority: 'normal', notes: '', headcount: null })
+  const blank = (): Form => ({ projectId: projectFilter || projects[0]?.id || '', name: '', discipline: '', startDate: null, endDate: null, status: 'open', priority: 'normal', notes: '', headcount: null, plannedDays: null, progress: 0, actualStart: null, actualEnd: null, deliverable: '' })
   const open = (t?: Task) => setEditing(t ? { id: t.id, form: { ...t } } : { form: blank() })
 
   // who is on which task in the loaded window (upcoming assignments)
@@ -112,11 +112,14 @@ export default function Tasks() {
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Discipline"><Select value={f.discipline} onChange={(e) => set({ discipline: e.target.value })}><option value="">Any</option>{settings.disciplines.map((d) => <option key={d} value={d}>{d}</option>)}</Select></Field>
                 <Field label="People needed per day"><Input type="number" min={0} value={f.headcount ?? ''} onChange={(e) => set({ headcount: e.target.value ? Number(e.target.value) : null })} /></Field>
-                <Field label="Start"><Input type="date" value={f.startDate ?? ''} onChange={(e) => set({ startDate: e.target.value || null })} /></Field>
-                <Field label="End"><Input type="date" value={f.endDate ?? ''} onChange={(e) => set({ endDate: e.target.value || null })} /></Field>
+                <Field label="Planned start"><Input type="date" value={f.startDate ?? ''} onChange={(e) => set({ startDate: e.target.value || null })} /></Field>
+                <Field label="Planned finish"><Input type="date" value={f.endDate ?? ''} onChange={(e) => set({ endDate: e.target.value || null })} /></Field>
+                <Field label="Planned effort (person-days)"><Input type="number" min={0} value={f.plannedDays ?? ''} onChange={(e) => set({ plannedDays: e.target.value ? Number(e.target.value) : null })} /></Field>
+                <Field label="Progress %"><Input type="number" min={0} max={100} value={f.progress} onChange={(e) => set({ progress: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} /></Field>
                 <Field label="Status"><Select value={f.status} onChange={(e) => set({ status: e.target.value as TaskStatus })}>{(Object.keys(TASK_STATUS_LABEL) as TaskStatus[]).map((s) => <option key={s} value={s}>{TASK_STATUS_LABEL[s]}</option>)}</Select></Field>
                 <Field label="Priority"><Select value={f.priority} onChange={(e) => set({ priority: e.target.value as Priority })}>{(Object.keys(PRIORITY_LABEL) as Priority[]).map((s) => <option key={s} value={s}>{PRIORITY_LABEL[s]}</option>)}</Select></Field>
               </div>
+              <Field label="Deliverable (what done means)"><Input value={f.deliverable} onChange={(e) => set({ deliverable: e.target.value })} placeholder="e.g. LOD 400 federated model issued to client" /></Field>
               <Field label="Notes"><Textarea value={f.notes} onChange={(e) => set({ notes: e.target.value })} /></Field>
             </div>
           )

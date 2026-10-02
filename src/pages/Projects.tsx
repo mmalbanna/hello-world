@@ -69,7 +69,7 @@ export default function Projects() {
             </div>
             <Field label="Client"><Input value={editing.form.client} onChange={(e) => setEditing({ ...editing, form: { ...editing.form, client: e.target.value } })} /></Field>
             <Field label="Status"><Select value={editing.form.status} onChange={(e) => setEditing({ ...editing, form: { ...editing.form, status: e.target.value as ProjectStatus } })}>{(Object.keys(PROJECT_STATUS_LABEL) as ProjectStatus[]).map((s) => <option key={s} value={s}>{PROJECT_STATUS_LABEL[s]}</option>)}</Select></Field>
-            <Field label="Colour">
+            <Field label="Colour" group>
               <div className="flex flex-wrap gap-2">
                 {PROJECT_PALETTE.map((c) => <button key={c} type="button" onClick={() => setEditing({ ...editing, form: { ...editing.form, color: c } })} className={`h-8 w-8 rounded-full ${editing.form.color === c ? 'ring-2 ring-offset-2 ring-slate-800' : ''}`} style={{ background: c }} aria-label={c} />)}
               </div>

@@ -1,10 +1,12 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { CalendarDays, FolderKanban, ListChecks, Users, FileOutput, Settings, Activity, ShieldCheck, LogOut, WifiOff } from 'lucide-react'
+import { CalendarDays, FolderKanban, ListChecks, Users, FileOutput, Settings, Activity, ShieldCheck, LogOut, WifiOff, LayoutDashboard, Grid2x2, MoreHorizontal } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { Toasts } from './ui'
 
 const nav = [
-  { to: '/', label: 'Planner', icon: CalendarDays, end: true },
+  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/board', label: 'Sand table', icon: Grid2x2 },
+  { to: '/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/projects', label: 'Projects', icon: FolderKanban },
   { to: '/tasks', label: 'Tasks', icon: ListChecks },
   { to: '/people', label: 'People', icon: Users },
@@ -22,7 +24,7 @@ export default function Layout() {
   const dataError = useStore((s) => s.dataError)
   const isAdmin = profile?.role === 'admin'
   const items = nav.filter((n) => !n.admin || isAdmin)
-  const mobileItems = items.filter((n) => ['/', '/tasks', '/people', '/reports', '/settings'].includes(n.to))
+  const mobileItems = [...items.filter((n) => ['/', '/board', '/calendar', '/tasks'].includes(n.to)), { to: '/more', label: 'More', icon: MoreHorizontal, end: false }]
 
   return (
     <div className="flex h-full flex-col md:flex-row">

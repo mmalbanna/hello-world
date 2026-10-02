@@ -25,6 +25,8 @@ export interface Person {
   active: boolean
   order: number
   notes: string
+  /** Small JPEG data URL (max ~160px), stored inline so no Storage bucket is needed */
+  photo: string | null
 }
 
 export type ProjectStatus = 'active' | 'upcoming' | 'on_hold' | 'closed'
@@ -49,7 +51,9 @@ export interface Task {
   projectId: string
   name: string
   discipline: string
+  /** Planned start (YYYY-MM-DD) */
   startDate: string | null
+  /** Planned finish (YYYY-MM-DD) */
   endDate: string | null
   status: TaskStatus
   priority: Priority
@@ -57,6 +61,18 @@ export interface Task {
   notes: string
   /** Optional: how many people this task ideally needs per day */
   headcount: number | null
+  /** Planned effort in person-days */
+  plannedDays: number | null
+  /** Reported actual progress 0..100 */
+  progress: number
+  progressUpdatedAt?: unknown
+  progressUpdatedBy?: string
+  /** First day someone was allocated */
+  actualStart: string | null
+  /** Day the task was marked done */
+  actualEnd: string | null
+  /** Deliverable / what "done" means */
+  deliverable: string
 }
 
 /** One doc per person per day. Doc id = `${personId}__${date}` */
@@ -71,6 +87,85 @@ export interface Allocation {
   updatedBy: string
   updatedByName: string
   updatedAt?: unknown
+  /** Set when this day is part of a temporary loan to another task */
+  loanId?: string | null
+}
+
+export type LoanStatus = 'active' | 'returned' | 'cancelled'
+
+/** A person lent from their current task to another one, to be returned later. */
+export interface Loan {
+  id: string
+  personId: string
+  fromTaskId: string
+  fromProjectId: string
+  toTaskId: string
+  toProjectId: string
+  startDate: string
+  plannedReturn: string
+  actualReturn: string | null
+  reason: string
+  note: string
+  status: LoanStatus
+  createdBy: string
+  createdByName: string
+  createdAt?: unknown
+}
+
+export type EventKind =
+  | 'task_created' | 'task_started' | 'progress' | 'task_interrupted' | 'task_resumed' | 'task_completed' | 'task_reopened' | 'task_replanned'
+  | 'loan_started' | 'loan_returned' | 'loan_extended'
+  | 'assigned' | 'moved' | 'released'
+
+/** Structured history used by the overview and the reports. */
+export interface PlanEvent {
+  id: string
+  at?: unknown
+  /** Effective date YYYY-MM-DD */
+  date: string
+  byUid: string
+  byName: string
+  kind: EventKind
+  taskId: string | null
+  projectId: string | null
+  personId: string | null
+  fromTaskId: string | null
+  toTaskId: string | null
+  progress: number | null
+  reason: string | null
+  note: string
+  /** date range (assignments) or old planned end (replanned) */
+  from: string | null
+  to: string | null
+}
+
+export const REASONS: Record<string, string> = {
+  client_change: 'Client change or new instruction',
+  missing_input: 'Waiting for input or information',
+  priority_change: 'Priority change',
+  resource_moved: 'Resource needed elsewhere',
+  absence: 'Leave or absence',
+  technical: 'Technical or software issue',
+  rework: 'Rework or quality issue',
+  scope_change: 'Scope change',
+  other: 'Other',
+}
+
+export const EVENT_LABEL: Record<EventKind, string> = {
+  task_created: 'Task created',
+  task_started: 'Task started',
+  progress: 'Progress update',
+  task_interrupted: 'Task interrupted',
+  task_resumed: 'Task resumed',
+  task_completed: 'Task completed',
+  task_reopened: 'Task reopened',
+  task_replanned: 'Finish date replanned',
+  loan_started: 'Resource lent',
+  loan_returned: 'Resource returned',
+  loan_extended: 'Loan extended',
+  assigned: 'Assigned',
+  moved: 'Moved',
+  released: 'Released',
 }
 
 export interface Settings {

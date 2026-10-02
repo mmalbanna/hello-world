@@ -26,7 +26,9 @@ service cloud.firestore {
 
     // Every signed-in person with a profile may read the plan.
     match /projects/{id}   { allow read: if isViewer(); allow write: if isAdmin(); }
-    match /people/{id}     { allow read: if isViewer(); allow write: if isAdmin(); }
+    match /people/{id}     { allow read: if isViewer(); allow create, delete: if isAdmin(); allow update: if isEditor(); }
+    match /loans/{id}      { allow read: if isViewer(); allow write: if isEditor(); }
+    match /events/{id}     { allow read: if isViewer(); allow create: if isEditor(); allow update, delete: if isAdmin(); }
     match /settings/{id}   { allow read: if isViewer(); allow write: if isAdmin(); }
     match /tasks/{id}      { allow read: if isViewer(); allow write: if isEditor(); }
     match /allocations/{id}{ allow read: if isViewer(); allow write: if isEditor(); }

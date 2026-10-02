@@ -60,7 +60,7 @@ export function DetailDialog({ alloc, onClose }: { alloc: Allocation | null; onC
   })()
 
   const ScopePicker = ({ allowRun }: { allowRun?: boolean }) => (
-    <Field label="Apply to">
+    <Field label="Apply to" group>
       <div className="flex flex-wrap gap-2 text-sm">
         {[
           ['day', `This day only (${fmtShort(alloc.date)})`],
@@ -95,7 +95,7 @@ export function DetailDialog({ alloc, onClose }: { alloc: Allocation | null; onC
                 <Textarea value={note} onChange={(e) => setNote(e.target.value)} className="min-h-[56px]" />
                 <Button disabled={note === (alloc.note ?? '')} onClick={() => wrap(() => setAllocationNote(alloc.id, note))}>Save</Button>
               </div>
-            ) : <div className="text-sm text-slate-700">{alloc.note || '—'}</div>}
+            ) : <div className="text-sm text-slate-700">{alloc.note || 'none'}</div>}
           </Field>
           {canEdit && (
             <div className="grid grid-cols-2 gap-2">

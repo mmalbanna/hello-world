@@ -9,6 +9,7 @@ import { PERSON_TYPE_LABEL, type PersonType } from '../lib/types'
 import { buildPlan, fileStem, planToText, type PlanData } from '../export/plan'
 import { canShareFiles, shareOrDownload, downloadBlob } from '../export/share'
 import { tint } from '../lib/colors'
+import ReportsHistory from './ReportsHistory'
 
 type Kind = 'excel' | 'word' | 'pdf'
 
@@ -75,14 +76,20 @@ export default function Reports() {
   }
 
   const setF = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }))
+  const [kind, setKind] = useState<'plan' | 'history'>('plan')
 
   return (
     <div>
-      <PageHeader title="Share the plan" subtitle="Export the allocation as Excel, Word or PDF, or send a plain-text summary to a chat." />
+      <PageHeader title="Share plan and reports" subtitle="The allocation plan for the team, or the history and progress report for management." />
+      <div className="mb-3 flex gap-1 rounded-lg bg-slate-100 p-1 text-sm">
+        <button className={`flex-1 rounded-md px-3 py-1.5 font-medium ${kind === 'plan' ? 'bg-white shadow-sm text-brand' : 'text-slate-600'}`} onClick={() => setKind('plan')}>Allocation plan</button>
+        <button className={`flex-1 rounded-md px-3 py-1.5 font-medium ${kind === 'history' ? 'bg-white shadow-sm text-brand' : 'text-slate-600'}`} onClick={() => setKind('history')}>History and progress</button>
+      </div>
+      {kind === 'history' ? <ReportsHistory /> : <>
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-[1fr_1fr_auto]">
         <Field label="From"><Input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></Field>
         <Field label="To"><Input type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} /></Field>
-        <Field label="Quick ranges">
+        <Field label="Quick ranges" group>
           <div className="flex flex-wrap gap-1">
             {([['week', 'This week'], ['next', 'Next week'], ['2w', '2 weeks'], ['4w', '4 weeks'], ['month', 'This month']] as const).map(([k, l]) => <Button key={k} variant="ghost" className="border border-slate-200" onClick={() => preset(k)}>{l}</Button>)}
           </div>
@@ -141,6 +148,7 @@ export default function Reports() {
           </div>
         )}
       </div>
+      </>}
     </div>
   )
 }

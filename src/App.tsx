@@ -13,6 +13,9 @@ import Users from './pages/Users'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
 import ActivityPage from './pages/Activity'
+import Board from './pages/Board'
+import Overview from './pages/Overview'
+import More from './pages/More'
 
 export default function App() {
   const configStatus = useStore((s) => s.configStatus)
@@ -44,7 +47,10 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Planner />} />
+        <Route index element={<Overview />} />
+        <Route path="board" element={<Board />} />
+        <Route path="calendar" element={<Planner />} />
+        <Route path="more" element={<More />} />
         <Route path="projects" element={<Projects />} />
         <Route path="tasks" element={<Tasks />} />
         <Route path="people" element={<People />} />

@@ -20,13 +20,15 @@ export function Button({ variant = 'secondary', className = '', busy, children, 
   )
 }
 
-export function Field({ label, hint, children, className = '' }: { label: string; hint?: string; children: ReactNode; className?: string }) {
+export function Field({ label, hint, children, className = '', group }: { label: string; hint?: string; children: ReactNode; className?: string; group?: boolean }) {
+  // `group` renders a div instead of a label (for radio groups and buttons, which carry their own labels)
+  const Tag: 'label' | 'div' = group ? 'div' : 'label'
   return (
-    <label className={`block ${className}`}>
+    <Tag className={`block ${className}`}>
       <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
       {children}
       {hint && <span className="mt-1 block text-xs text-slate-500">{hint}</span>}
-    </label>
+    </Tag>
   )
 }
 
