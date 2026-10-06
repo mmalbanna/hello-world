@@ -1,0 +1,231 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>flythrough renderer</title></head>
+<body>
+<canvas id="c" width="16" height="16"></canvas>
+<script type="module">
+const W = 1920, H = 1080;
+const log = (m) => fetch('/log', { method: 'POST', body: String(m) });
+const params = new URLSearchParams(location.search);
+const jobs = await (await fetch(params.get('jobs'))).json();
+const gl = document.getElementById('c').getContext('webgl2', { antialias: false, alpha: true, premultipliedAlpha: false });
+if (!gl) throw new Error('no webgl2');
+if (!gl.getExtension('EXT_color_buffer_float')) throw new Error('no float render targets');
+const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
+
+const VS = `#version 300 es
+in vec3 aPos; in vec2 aUV;
+uniform mat4 uVP;
+out vec2 vUV; out vec3 vP;
+void main() { vUV = aUV; vP = aPos; gl_Position = uVP * vec4(aPos, 1.0); }`;
+
+// Edge triangles (spanning a depth jump) show the original pixels while the
+// view is close to the source and fade out, stochastically per sub-frame,
+// as the camera move stretches them (anisotropy of the screen-to-texture map).
+const FS = `#version 300 es
+precision highp float;
+in vec2 vUV; in vec3 vP;
+uniform sampler2D uTex, uWater, uSky, uSkyPlate;
+uniform float uTau, uF, uWaterOn, uSkyOn, uDrift, uEdge, uSeed;
+uniform vec2 uTexSize;
+out vec4 o;
+float bayer(vec2 p) {
+  ivec2 q = ivec2(mod(p + vec2(uSeed, uSeed * 1.7), 4.0));
+  int m[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+  return (float(m[q.y * 4 + q.x]) + 0.5) / 16.0;
+}
+void main() {
+  if (uEdge > 0.5) {
+    vec2 a = dFdx(vUV * uTexSize), b = dFdy(vUV * uTexSize);
+    float S = dot(a, a) + dot(b, b);
+    float D = abs(a.x * b.y - a.y * b.x);
+    float r = sqrt(max(S * S - 4.0 * D * D, 0.0));
+    float an = sqrt((S + r) / max(S - r, 1e-8));
+    float keep = clamp((2.2 - an) / 0.8, 0.0, 1.0);
+    if (keep < bayer(floor(gl_FragCoord.xy))) discard;
+  }
+  vec2 uv = vUV;
+  float lum = 1.0;
+  if (uWaterOn > 0.5) {
+    float w = texture(uWater, vUV).r;
+    if (w > 0.004) {
+      vec2 d = vec2(0.0); float l = 0.0;
+      vec4 waves[3] = vec4[3](vec4(0.95, 0.35, 0.55, 0.0), vec4(0.6, -0.6, 0.45, 1.7), vec4(0.38, 1.35, 0.35, 4.1));
+      for (int i = 0; i < 3; i++) {
+        float k = 6.2831853 / waves[i].x;
+        float arg = k * (cos(waves[i].y) * vP.x + sin(waves[i].y) * vP.z) - k * waves[i].z * uTau + waves[i].w;
+        d.x += sin(arg); d.y += cos(arg * 1.07 + 0.5); l += cos(arg);
+      }
+      float amp = uF * 0.0028 / max(vP.z, 0.5);
+      uv += vec2(d.x * amp, d.y * amp * 0.5) * w / uTexSize;
+      lum = 1.0 + 0.05 * l / 3.0 * w;
+    }
+  }
+  vec3 c = texture(uTex, uv).rgb * lum;
+  if (uSkyOn > 0.5) {
+    float s = texture(uSky, vUV).r;
+    if (s > 0.004) c = mix(c, texture(uSkyPlate, vUV + vec2(uDrift, 0.0)).rgb, s);
+  }
+  o = vec4(c, 1.0);
+}`;
+
+const QVS = `#version 300 es
+out vec2 vUV;
+void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); vUV = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
+const QFS = `#version 300 es
+precision highp float;
+in vec2 vUV; uniform sampler2D uT; uniform float uScale; out vec4 o;
+void main() { o = texture(uT, vUV) * uScale; }`;
+const CFS = `#version 300 es
+precision highp float;
+in vec2 vUV; uniform sampler2D uFg, uBg; out vec4 o;
+void main() { vec4 f = texture(uFg, vUV), b = texture(uBg, vUV); o = f + b * (1.0 - f.a); }`;
+
+function compile(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs)); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.bindAttribLocation(p, 0, 'aPos'); gl.bindAttribLocation(p, 1, 'aUV');
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); u[a.name] = gl.getUniformLocation(p, a.name); }
+  return { p, u };
+}
+const scene = program(VS, FS);
+const quad = program(QVS, QFS);
+const comp = program(QVS, CFS);
+const quadVAO = gl.createVertexArray();
+
+function target(internal, format, type, depth) {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internal, W, H, 0, format, type, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+  if (depth) {
+    const rb = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT32F, W, H);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rb);
+  }
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error('fbo incomplete');
+  return { t, fb };
+}
+const fgT = target(gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, true);
+const bgT = target(gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, true);
+const acc = target(gl.RGBA32F, gl.RGBA, gl.FLOAT, false);
+const out = target(gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, false);
+
+function texture(data, w, h, ch, mip) {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  if (ch === 4) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+  else gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, w, h, 0, gl.RED, gl.UNSIGNED_BYTE, data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  if (mip) {
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, 8);
+  } else gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  return t;
+}
+const black = texture(new Uint8Array([0, 0, 0, 255]), 1, 1, 4, false);
+
+async function bin(path) { const r = await fetch(path); if (!r.ok) throw new Error('missing ' + path); return r.arrayBuffer(); }
+async function layerMesh(name, layer) {
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const pb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, pb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(await bin(`${name}/${layer}_pos.bin`)), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  const ub = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, ub); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(await bin(`${name}/${layer}_uv.bin`)), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
+  const idx = async (kind) => {
+    const data = new Uint32Array(await bin(`${name}/${layer}_${kind}.bin`));
+    const b = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, b); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    return { b, n: data.length };
+  };
+  return { vao, bufs: [pb, ub], solid: await idx('solid'), edge: await idx('edge') };
+}
+
+const shots = new Map();
+async function loadShot(name) {
+  if (shots.has(name)) return shots.get(name);
+  if (shots.size >= 2) {
+    const [old, s] = shots.entries().next().value;
+    for (const m of [s.fg, s.bg]) { gl.deleteVertexArray(m.vao); [...m.bufs, m.solid.b, m.edge.b].forEach((b) => gl.deleteBuffer(b)); }
+    for (const t of s.texs) gl.deleteTexture(t);
+    shots.delete(old);
+  }
+  const meta = await (await fetch(`${name}/meta.json`)).json();
+  const tw = meta.W, th = meta.H;
+  const fg = await layerMesh(name, 'fg');
+  const bg = await layerMesh(name, 'bg');
+  const rgb = texture(new Uint8Array(await bin(`${name}/rgb.raw`)), tw, th, 4, true);
+  const bgt = texture(new Uint8Array(await bin(`${name}/bg.raw`)), tw, th, 4, true);
+  const water = meta.water ? texture(new Uint8Array(await bin(`${name}/water.raw`)), tw, th, 1, false) : black;
+  const sky = meta.sky ? texture(new Uint8Array(await bin(`${name}/sky.raw`)), tw, th, 1, false) : black;
+  const skyplate = meta.sky ? texture(new Uint8Array(await bin(`${name}/skyplate.raw`)), tw, th, 4, true) : black;
+  const s = { meta, fg, bg, rgb, bgt, water, sky, skyplate, texs: [rgb, bgt, water, sky, skyplate].filter((t) => t !== black) };
+  shots.set(name, s);
+  return s;
+}
+
+function bindTex(prog, unit, t, name) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); gl.uniform1i(prog.u[name], unit); }
+function drawLayer(S, m, tex, sb, seed) {
+  const u = scene.u;
+  gl.useProgram(scene.p);
+  bindTex(scene, 0, tex, 'uTex'); bindTex(scene, 1, S.water, 'uWater'); bindTex(scene, 2, S.sky, 'uSky'); bindTex(scene, 3, S.skyplate, 'uSkyPlate');
+  gl.uniformMatrix4fv(u.uVP, false, sb.vp);
+  gl.uniform1f(u.uTau, sb.tau); gl.uniform1f(u.uF, S.meta.f);
+  gl.uniform1f(u.uWaterOn, S.meta.water ? 1 : 0); gl.uniform1f(u.uSkyOn, S.meta.sky ? 1 : 0);
+  gl.uniform1f(u.uDrift, S.meta.cloud_uv_per_s * sb.tau);
+  gl.uniform2f(u.uTexSize, S.meta.W, S.meta.H);
+  gl.uniform1f(u.uSeed, seed);
+  gl.bindVertexArray(m.vao);
+  for (const [part, edge] of [[m.solid, 0], [m.edge, 1]]) {
+    if (!part.n) continue;
+    gl.uniform1f(u.uEdge, edge);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, part.b);
+    gl.drawElements(gl.TRIANGLES, part.n, gl.UNSIGNED_INT, 0);
+  }
+  gl.bindVertexArray(null);
+}
+function fullscreen(prog) { gl.useProgram(prog.p); gl.bindVertexArray(quadVAO); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+
+const pix = new Uint8Array(W * H * 4);
+gl.viewport(0, 0, W, H);
+const t0 = performance.now(); let count = 0;
+for (const job of jobs.frames) {
+  for (const L of job.layers) {
+    const S = await loadShot(L.shot);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, acc.fb); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    L.subs.forEach((sb, k) => {
+      gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.clearDepth(1); gl.clearColor(0, 0, 0, 0);
+      for (const [fb, m, tex, seed] of [[bgT.fb, S.bg, S.bgt, (k * 5) % 16], [fgT.fb, S.fg, S.rgb, (k * 3) % 16]]) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        drawLayer(S, m, tex, sb, seed);
+      }
+      gl.disable(gl.DEPTH_TEST);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, acc.fb); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+      gl.useProgram(comp.p);
+      bindTex(comp, 0, fgT.t, 'uFg'); bindTex(comp, 1, bgT.t, 'uBg');
+      fullscreen(comp);
+    });
+    gl.bindFramebuffer(gl.FRAMEBUFFER, out.fb); gl.disable(gl.BLEND);
+    gl.useProgram(quad.p); bindTex(quad, 0, acc.t, 'uT'); gl.uniform1f(quad.u.uScale, 1.0 / L.subs.length);
+    fullscreen(quad);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, pix);
+    await fetch('/out', { method: 'POST', body: pix });
+    count++;
+  }
+  if (job.fi % 30 === 0) log(`frame ${job.fi} (${((performance.now() - t0) / 1000 / Math.max(count, 1)).toFixed(2)} s/layer)`);
+}
+await fetch('/done', { method: 'POST' });
+</script>
+</body>
+</html>

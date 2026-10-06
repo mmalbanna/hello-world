@@ -283,14 +283,49 @@ for c, (pan, f0, period, off) in enumerate(((-0.6, 4650, 0.82, 24.4), (0.55, 438
             sfx.add(p, ct + k * 0.05, 0.05 * fade, pan)
         ct += period + rng.uniform(-0.05, 0.05)
 
-# Transition whooshes centred on each crossfade
-for c in (6.5, 12.5, 18.5, 24.5):
-    d = 1.6
-    n = int(SR * d)
+# Transition sound design, locked to the picture's cuts
+def swept_noise(dur, f0, f1, bw=0.35):
+    """Noise through a band-pass whose centre glides from f0 to f1 (Hz)."""
+    n, win, hop = int(SR * dur), 1024, 256
+    noise = rng.normal(0, 1, n + win)
+    out = np.zeros(n + win)
+    hann = np.hanning(win)
+    f = np.fft.rfftfreq(win, 1 / SR)
+    for start in range(0, n, hop):
+        fc = f0 * (f1 / f0) ** (start / max(n - 1, 1))
+        g = np.exp(-0.5 * ((np.log(f + 1) - np.log(fc)) / bw) ** 2)
+        out[start : start + win] += np.fft.irfft(np.fft.rfft(noise[start : start + win] * hann) * g, win) * hann
+    out = out[:n]
+    return out / (np.abs(out).max() + 1e-9)
+
+
+def thump(dur=0.5):
+    n = int(SR * dur)
     tt = t_axis(n)
-    w = fft_filter(rng.normal(0, 1, n), 300, 3000)
-    e = np.exp(-((tt - d * 0.55) / 0.32) ** 2)
-    sfx.add(w * e / (np.abs(w).max() + 1e-9), c - d * 0.55, 0.06, 0.0)
+    f = 46 + 30 * np.exp(-tt / 0.06)
+    return np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt / 0.16)
+
+
+for c in (6.0, 18.0):  # zoom-through: air rushes up into the cut, passes, settles
+    rise = swept_noise(0.7, 350, 5200)
+    rise *= np.linspace(0, 1, rise.size) ** 2.2
+    sfx.add(rise, c - 0.7, 0.16, -0.1)
+    pas = swept_noise(0.55, 4200, 300)
+    pas *= np.exp(-t_axis(pas.size) / 0.16)
+    sfx.add(pas, c, 0.15, 0.1)
+    sfx.add(thump(), c - 0.01, 0.30, 0.0)
+
+sw = swept_noise(0.34, 6000, 700, bw=0.5)  # whip pan at 12 s, left to right
+env = np.sin(np.pi * np.linspace(0, 1, sw.size)) ** 1.5
+pan = np.linspace(-0.8, 0.8, sw.size)
+ang = (pan + 1) * np.pi / 4
+i = int((12.0 - 0.2) * SR)
+sfx.L[i : i + sw.size] += sw * env * np.cos(ang) * 0.20
+sfx.R[i : i + sw.size] += sw * env * np.sin(ang) * 0.20
+
+swell = swept_noise(1.8, 900, 2600, bw=0.6)  # dissolve into dusk
+swell *= np.sin(np.pi * np.linspace(0, 1, swell.size)) ** 2
+sfx.add(swell, 24.0 - 0.9, 0.06, 0.0)
 
 # ------------------------------------------------------------------- reverb + mix
 def reverb(l, r, seconds=2.2, wet=0.25):
