@@ -8,8 +8,8 @@ A 30-second camera flythrough presenting the vernacular Lebanese adaptation of t
 
 | File | Spec (measured with ffprobe / ebur128) |
 |---|---|
-| `BernardDoumit_Rev02_Flythrough_30s_1080p.mp4` | SPEC_VIDEO |
-| `BernardDoumit_Rev02_Score.wav` | Original score and sound effects, 48 kHz 16-bit stereo, -16 LUFS |
+| `BernardDoumit_Rev02_Flythrough_30s_1080p.mp4` | MP4, H.264 High@4.0, 1920x1080 (16:9), 30 fps, yuv420p, 3.9 Mbps two-pass; AAC-LC 48 kHz stereo 128 kbps; 30.000 s; 15.19 MB; fast-start; -16.1 LUFS, -2.3 dBTP |
+| `BernardDoumit_Rev02_Score.wav` | Original score and sound effects, 48 kHz 16-bit stereo, -16.0 LUFS, -4.5 dBTP |
 
 ## How the flythrough is made
 
