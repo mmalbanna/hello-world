@@ -25,14 +25,27 @@ void main() { vUV = aUV; vP = aPos; gl_Position = uVP * vec4(aPos, 1.0); }`;
 const FS = `#version 300 es
 precision highp float;
 in vec2 vUV; in vec3 vP;
-uniform sampler2D uTex, uWater, uSky, uSkyPlate;
+uniform sampler2D uTex, uWater, uSky, uSkyPlate, uSway, uGust;
 uniform float uTau, uF, uWaterOn, uSkyOn, uDrift, uEdge, uSeed;
+uniform float uSwayOn, uGustOn, uGustK, uGustW, uGustAmt, uWaterAmp, uCaustic, uGlint;
 uniform vec2 uTexSize;
 out vec4 o;
 float bayer(vec2 p) {
   ivec2 q = ivec2(mod(p + vec2(uSeed, uSeed * 1.7), 4.0));
   int m[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
   return (float(m[q.y * 4 + q.x]) + 0.5) / 16.0;
+}
+// Light network seen through rippling water (pool caustics).
+float caustic(vec2 p, float t) {
+  vec2 i = p; float c = 1.0; float inten = 0.005;
+  for (int n = 0; n < 4; n++) {
+    float tt = t * (1.0 - (3.5 / float(n + 1)));
+    i = p + vec2(cos(tt - i.x) + sin(tt + i.y), sin(tt - i.y) + cos(tt + i.x));
+    c += 1.0 / length(vec2(p.x / (sin(i.x + tt) / inten), p.y / (cos(i.y + tt) / inten)));
+  }
+  c /= 4.0;
+  c = 1.17 - pow(c, 1.4);
+  return clamp(pow(abs(c), 8.0), 0.0, 1.0);
 }
 void main() {
   if (uEdge > 0.5) {
@@ -46,22 +59,59 @@ void main() {
   }
   vec2 uv = vUV;
   float lum = 1.0;
+  // plants: sway anchored at the base, a slow gust travelling across, leaf flutter on top
+  if (uSwayOn > 0.5) {
+    float sw = texture(uSway, vUV).r;
+    if (sw > 0.003) {
+      vec2 q = vUV * uTexSize;
+      float ph = 0.6 * sin(q.x * 0.021 + q.y * 0.013) + 0.4 * sin(q.x * 0.047 - q.y * 0.031 + 1.3);
+      float gust = 0.62 + 0.38 * sin(uTau * 0.85 - vUV.x * 4.0);
+      float sx = 0.72 * sin(uTau * 2.1 + ph * 2.5) + 0.28 * sin(uTau * 5.9 + ph * 6.0);
+      float sy = 0.30 * sin(uTau * 3.4 + ph * 4.0);
+      uv += vec2(sx * gust, sy) * sw * 8.0 / uTexSize;
+    }
+  }
+  // wind rolling over grass: moving bands of sheen
+  if (uGustOn > 0.5) {
+    float g = texture(uGust, vUV).r;
+    if (g > 0.003) {
+      vec2 p = vP.xz * uGustK;
+      vec2 wd = vec2(0.8, 0.6), pd = vec2(-0.6, 0.8);
+      float a = dot(p, wd), b = dot(p, pd);
+      float band = sin(a - uTau * uGustW + 1.6 * sin(b * 0.35 + uTau * 0.25) + 0.7 * sin(b * 0.9 - a * 0.3));
+      float env = 0.5 + 0.5 * sin(a * 0.33 - uTau * uGustW * 0.55 + 2.0 + 0.8 * sin(b * 0.21));
+      lum *= 1.0 + uGustAmt * band * env * g;
+    }
+  }
+  float caus = 0.0, glint = 0.0, wmask = 0.0;
   if (uWaterOn > 0.5) {
     float w = texture(uWater, vUV).r;
     if (w > 0.004) {
+      wmask = w;
       vec2 d = vec2(0.0); float l = 0.0;
-      vec4 waves[3] = vec4[3](vec4(0.95, 0.35, 0.55, 0.0), vec4(0.6, -0.6, 0.45, 1.7), vec4(0.38, 1.35, 0.35, 4.1));
-      for (int i = 0; i < 3; i++) {
+      vec4 waves[5] = vec4[5](vec4(0.95, 0.35, 0.55, 0.0), vec4(0.6, -0.6, 0.45, 1.7), vec4(0.38, 1.35, 0.35, 4.1),
+                              vec4(0.22, 2.3, 0.28, 0.9), vec4(0.15, -1.9, 0.24, 2.6));
+      for (int i = 0; i < 5; i++) {
         float k = 6.2831853 / waves[i].x;
         float arg = k * (cos(waves[i].y) * vP.x + sin(waves[i].y) * vP.z) - k * waves[i].z * uTau + waves[i].w;
-        d.x += sin(arg); d.y += cos(arg * 1.07 + 0.5); l += cos(arg);
+        float wt = i < 3 ? 1.0 : 0.6;
+        d.x += sin(arg) * wt; d.y += cos(arg * 1.07 + 0.5) * wt; l += cos(arg) * wt;
       }
-      float amp = uF * 0.0028 / max(vP.z, 0.5);
+      float amp = uF * uWaterAmp / max(vP.z, 0.5);
       uv += vec2(d.x * amp, d.y * amp * 0.5) * w / uTexSize;
-      lum = 1.0 + 0.05 * l / 3.0 * w;
+      lum *= 1.0 + 0.09 * l / 4.2 * w;
+      caus = caustic(vP.xz * 2.6, uTau * 0.9) * w;
+      float sp = sin(dot(vP.xz, vec2(12.7, 9.3)) + uTau * 3.1) * sin(dot(vP.xz, vec2(-7.1, 15.3)) - uTau * 2.3)
+               * sin(dot(vP.xz, vec2(4.3, -11.9)) + uTau * 1.7);
+      glint = pow(max(sp, 0.0), 10.0) * w;
     }
   }
   vec3 c = texture(uTex, uv).rgb * lum;
+  if (wmask > 0.0) {
+    float y = dot(c, vec3(0.299, 0.587, 0.114));
+    c += caus * uCaustic * vec3(0.92, 1.0, 1.0) * (0.35 + 0.65 * y);
+    c += glint * uGlint * (0.3 + 0.7 * y);
+  }
   if (uSkyOn > 0.5) {
     float s = texture(uSky, vUV).r;
     if (s > 0.004) c = mix(c, texture(uSkyPlate, vUV + vec2(uDrift, 0.0)).rgb, s);
@@ -170,7 +220,9 @@ async function loadShot(name) {
   const water = meta.water ? texture(new Uint8Array(await bin(`${name}/water.raw`)), tw, th, 1, false) : black;
   const sky = meta.sky ? texture(new Uint8Array(await bin(`${name}/sky.raw`)), tw, th, 1, false) : black;
   const skyplate = meta.sky ? texture(new Uint8Array(await bin(`${name}/skyplate.raw`)), tw, th, 4, true) : black;
-  const s = { meta, fg, bg, rgb, bgt, water, sky, skyplate, texs: [rgb, bgt, water, sky, skyplate].filter((t) => t !== black) };
+  const sway = meta.sway ? texture(new Uint8Array(await bin(`${name}/sway.raw`)), tw, th, 1, false) : black;
+  const gust = meta.gust ? texture(new Uint8Array(await bin(`${name}/gust.raw`)), tw, th, 1, false) : black;
+  const s = { meta, fg, bg, rgb, bgt, water, sky, skyplate, sway, gust, texs: [rgb, bgt, water, sky, skyplate, sway, gust].filter((t) => t !== black) };
   shots.set(name, s);
   return s;
 }
@@ -180,6 +232,11 @@ function drawLayer(S, m, tex, sb, seed) {
   const u = scene.u;
   gl.useProgram(scene.p);
   bindTex(scene, 0, tex, 'uTex'); bindTex(scene, 1, S.water, 'uWater'); bindTex(scene, 2, S.sky, 'uSky'); bindTex(scene, 3, S.skyplate, 'uSkyPlate');
+  bindTex(scene, 4, S.sway, 'uSway'); bindTex(scene, 5, S.gust, 'uGust');
+  const M = S.meta;
+  gl.uniform1f(u.uSwayOn, M.sway ? 1 : 0); gl.uniform1f(u.uGustOn, M.gust ? 1 : 0);
+  gl.uniform1f(u.uGustK, M.gust_k || 0); gl.uniform1f(u.uGustW, M.gust_w || 0); gl.uniform1f(u.uGustAmt, M.gust_amount || 0);
+  gl.uniform1f(u.uWaterAmp, M.water_amp || 0.0028); gl.uniform1f(u.uCaustic, M.caustic || 0); gl.uniform1f(u.uGlint, M.glint || 0);
   gl.uniformMatrix4fv(u.uVP, false, sb.vp);
   gl.uniform1f(u.uTau, sb.tau); gl.uniform1f(u.uF, S.meta.f);
   gl.uniform1f(u.uWaterOn, S.meta.water ? 1 : 0); gl.uniform1f(u.uSkyOn, S.meta.sky ? 1 : 0);

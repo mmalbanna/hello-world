@@ -223,6 +223,57 @@ def mirror_fill(img, fill, source):
     return (img * (1 - soft) + filled * soft).astype(np.float32)
 
 
+def veg_layers(rgb, z, cfg, water=None):
+    """Sway amplitude (texture px / 8) for plants and a wind-ripple mask for
+    lawns and meadow. Plants are green or flowering pixels nearer than
+    veg.zmax; each is weighted by its height above the base of its run in
+    the column (trunks stay, tops move) and converted from a sway in metres
+    to pixels at its own distance."""
+    v = cfg.get("veg")
+    H, W = z.shape
+    if not v:
+        return np.zeros((H, W), np.float32), np.zeros((H, W), np.float32)
+    hsv = cv2.cvtColor((rgb * 255).astype(np.uint8), cv2.COLOR_RGB2HSV).astype(np.float32)
+    h, s, val = hsv[..., 0], hsv[..., 1] / 255, hsv[..., 2] / 255
+    green = (h > 28) & (h < 82) & (s > 0.18) & (val > 0.06)
+    flowers = ((h > 140) | (h < 8)) & (s > 0.35) & (val > 0.35)
+    near = z < v["zmax"]
+    if water is not None and water.size:
+        near &= cv2.dilate((water > 0.05).astype(np.uint8), np.ones((21, 21), np.uint8)) == 0
+    plants = (green | flowers) & near
+    gust = np.zeros((H, W), bool)
+    if v.get("meadow_vmin"):
+        gust = green & near & (val >= v["meadow_vmin"])
+        plants = (green & near & (val < v["meadow_vmin"])) | (flowers & near)
+    for x0, y0, x1, y1 in v.get("lawn", []):
+        box = np.zeros((H, W), bool)
+        box[y0:y1, x0:x1] = True
+        gust |= plants & box
+        plants &= ~box
+    plants = cv2.morphologyEx(plants.astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    plants = cv2.morphologyEx(plants, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    hgt = np.zeros((H, W), np.float32)
+    for y in range(H - 2, -1, -1):
+        hgt[y] = (hgt[y + 1] + 1) * plants[y]
+    f = (W / 2) / np.tan(np.radians(cfg["hfov"]) / 2)
+    weight = 0.35 + 0.65 * np.clip(hgt / 120, 0, 1)
+    amp = np.minimum(6.0, f * v["sway_world"] * weight / np.maximum(z, 0.5)) * plants
+    amp = cv2.GaussianBlur(cv2.dilate(amp, np.ones((5, 5), np.uint8)), (0, 0), 3.0)
+    sway = np.clip(amp / 8.0, 0, 1).astype(np.float32)
+    gust = cv2.GaussianBlur(gust.astype(np.float32), (0, 0), 4.0)
+    return sway, gust
+
+
+def main_veg(names):
+    out = ROOT / "build" / "scene"
+    for name in names:
+        cfg = SHOTS[name]
+        d = dict(np.load(out / f"{name}.npz"))
+        d["sway"], d["gust"] = veg_layers(d["rgb"], d["z"], cfg, d["water"])
+        np.savez(out / f"{name}.npz", **d)
+        print(name, "sway %.1f%% (max %.1f px)  gust %.1f%%" % ((d["sway"] > 0.02).mean() * 100, d["sway"].max() * 8, (d["gust"] > 0.5).mean() * 100), flush=True)
+
+
 def main(names):
     model = torch.jit.load(os.path.join(os.environ.get("MODELS", "/home/user/models"), "big-lama.pt"), map_location="cpu").eval()
     out = ROOT / "build" / "scene"
@@ -270,4 +321,8 @@ def main(names):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:] or list(SHOTS))
+    if sys.argv[1:2] == ["veg"]:
+        main_veg(sys.argv[2:] or list(SHOTS))
+    else:
+        main(sys.argv[1:] or list(SHOTS))
+        main_veg(sys.argv[1:] or list(SHOTS))

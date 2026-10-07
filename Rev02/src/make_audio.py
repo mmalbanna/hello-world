@@ -271,6 +271,13 @@ cic *= env_points([(0, 0), (17.6, 0), (19.0, 1), (23.6, 0.9), (24.8, 0), (30, 0)
 cic /= np.abs(cic).max() + 1e-9
 sfx.add(cic, 0, 0.035, -0.3)
 
+# Leaves rustling in the breeze while the cypresses and shrubs sway (shot 4)
+rust = fft_filter(rng.normal(0, 1, N), 1800, 7000)
+flutter = lfo(11.0, N, 0.25, 1.0, seed=21) * lfo(0.5, N, 0.3, 1.0, seed=22)
+rust *= flutter * env_points([(0, 0), (17.6, 0), (19.0, 1), (23.4, 0.9), (24.6, 0), (30, 0)])
+rust /= np.abs(rust).max() + 1e-9
+sfx.add(rust, 0, 0.045, 0.35)
+
 # Crickets at dusk (shot 5)
 for c, (pan, f0, period, off) in enumerate(((-0.6, 4650, 0.82, 24.4), (0.55, 4380, 0.95, 24.9))):
     ct = off

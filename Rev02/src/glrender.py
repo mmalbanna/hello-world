@@ -24,7 +24,8 @@ import cv2
 import numpy as np
 
 from flythrough import FPS, NFRAMES, SHUTTER, Post, Scene, pushpull, segments, tau_range
-from shots import ORDER, SHOTS
+import birds
+from shots import BIRDS, ORDER, SHOTS
 
 ROOT = Path(__file__).resolve().parent.parent
 GL = ROOT / "build" / "gl"
@@ -114,9 +115,19 @@ def export_shot(name):
     if has_sky:
         np.clip(d["sky"] * 255 + 0.5, 0, 255).astype(np.uint8).tofile(out / "sky.raw")
         rgba(d["skyplate"]).tofile(out / "skyplate.raw")
+    has_sway = "sway" in d and d["sway"].max() > 0.01
+    has_gust = "gust" in d and d["gust"].max() > 0.01
+    if has_sway:
+        np.clip(d["sway"] * 255 + 0.5, 0, 255).astype(np.uint8).tofile(out / "sway.raw")
+    if has_gust:
+        np.clip(d["gust"] * 255 + 0.5, 0, 255).astype(np.uint8).tofile(out / "gust.raw")
     cfg = SHOTS[name]
+    rip, gust = cfg.get("ripple", {}), cfg.get("gust", {})
     meta = dict(W=W, H=H, f=f, water=bool(has_water), sky=bool(has_sky),
-                cloud_uv_per_s=cfg.get("cloud_speed", 0.0) * (W / 2000) / W)
+                cloud_uv_per_s=cfg.get("cloud_speed", 0.0) * (W / 2000) / W,
+                sway=bool(has_sway), gust=bool(has_gust),
+                gust_k=gust.get("k", 0.0), gust_w=gust.get("w", 0.0), gust_amount=gust.get("amount", 0.0),
+                water_amp=rip.get("amp", 0.0028), caustic=rip.get("caustic", 0.0), glint=rip.get("glint", 0.0))
     (out / "meta.json").write_text(json.dumps(meta))
     print(name, "baseline %.2f m" % B, "fg solid/edge", counts["fg"], "bg solid/edge", counts["bg"], flush=True)
 
@@ -164,7 +175,6 @@ def fill_holes(rgb, a):
 def run(frames, consume, tag):
     scenes = {n: Scene(n) for n in ORDER}
     jobs = {"frames": [frame_job(fi, scenes) for fi in frames]}
-    del scenes
     jf = GL / f"jobs_{tag}.json"
     jf.write_text(json.dumps(jobs))
     proc = subprocess.Popen(["node", str(ROOT / "src" / "gl" / "render.mjs"), str(GL), jf.name], stdout=subprocess.PIPE)
@@ -177,7 +187,17 @@ def run(frames, consume, tag):
             if len(buf) != n:
                 raise SystemExit(f"renderer stopped at frame {job['fi']}")
             img = np.frombuffer(buf, np.uint8).reshape(H_OUT, W_OUT, 4)[::-1].astype(np.float32) / 255.0
-            rgb = post.layer(fill_holes(img[..., :3], img[..., 3]), L["shot"], L["radial"], L["hblur"])
+            rgb = fill_holes(img[..., :3], img[..., 3])
+            sc = scenes[L["shot"]]
+            tc = float(np.mean([sb["tau"] for sb in L["subs"]]))
+            taus = tc + ((np.arange(16) + 0.5) / 16 - 0.5) * SHUTTER
+
+            def cam_fn(t, sc=sc):
+                C, R, fj = sc.camera(t)
+                return C, R, sc.f * (W_OUT / sc.W) * sc.zoom(t) * fj["zoom"]
+
+            rgb = birds.draw(rgb, sc, taus, cam_fn, BIRDS.get(L["shot"]))
+            rgb = post.layer(rgb, L["shot"], L["radial"], L["hblur"])
             out = rgb * L["w"] if out is None else out + rgb * L["w"]
         consume(job["fi"], post.finish(out, job["fi"] / FPS))
     if proc.wait() != 0:
@@ -197,6 +217,26 @@ def cmd_stills(outdir, times):
     frames = [int(round(float(t) * FPS)) for t in times]
     save = lambda fi, img: cv2.imwrite(str(out / f"f{fi:04d}.png"), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
     run(frames, save, "stills")
+
+
+def cmd_anim(shot, tau_cam, outdir, times):
+    """Test: camera frozen at tau_cam, animation clock at each time (layer only)."""
+    out = Path(outdir)
+    out.mkdir(parents=True, exist_ok=True)
+    sc = Scene(shot)
+    C, R, fx = sc.camera(float(tau_cam), whip=False)
+    ft = sc.f * (W_OUT / sc.W) * sc.zoom(float(tau_cam)) * fx["zoom"]
+    jobs = {"frames": [{"fi": i, "layers": [{"shot": shot, "w": 1.0, "radial": 0.0, "hblur": 0.0,
+             "subs": [{"vp": vp(C, R, ft, *JITTER[j]), "tau": float(t)} for j in range(4)]}]}
+             for i, t in enumerate(times)]}
+    jf = GL / "jobs_anim.json"
+    jf.write_text(json.dumps(jobs))
+    proc = subprocess.Popen(["node", str(ROOT / "src" / "gl" / "render.mjs"), str(GL), jf.name], stdout=subprocess.PIPE)
+    n = W_OUT * H_OUT * 4
+    for i, t in enumerate(times):
+        img = np.frombuffer(proc.stdout.read(n), np.uint8).reshape(H_OUT, W_OUT, 4)[::-1]
+        cv2.imwrite(str(out / f"{shot}_{i:02d}.png"), cv2.cvtColor(img[..., :3], cv2.COLOR_RGB2BGR))
+    proc.wait()
 
 
 def cmd_part(a, b, path):
@@ -231,6 +271,8 @@ if __name__ == "__main__":
         cmd_export()
     elif cmd == "stills":
         cmd_stills(sys.argv[2], sys.argv[3:])
+    elif cmd == "anim":
+        cmd_anim(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:])
     elif cmd == "part":
         cmd_part(int(sys.argv[2]), int(sys.argv[3]), sys.argv[4])
     elif cmd == "render":

@@ -18,7 +18,8 @@ Each render becomes a small 3D scene, and a virtual camera flies through it (2.5
 1. **Depth**: Depth Anything V2 Large estimates per-pixel depth, which is calibrated to metres per shot. Pool water is levelled onto its terrace and small reliefs are flattened where they would only tear.
 2. **Layers**: the camera path of each shot is simulated to find exactly what it will uncover behind buildings and walls; LaMa inpaints that hidden background.
 3. **Rendering**: two triangle meshes per shot (foreground, cut at occlusion edges, and the inpainted background) are rasterised in WebGL2 (headless Chromium). Each frame averages 4 to 12 jittered sub-frames over a 180-degree shutter for anti-aliasing and real motion blur. Pool water ripples and clouds drift in the shader.
-4. **Edit**: cuts land on the music's bar lines: zoom-through at 0:06, whip pan at 0:12, zoom-through at 0:18, dissolve to dusk at 0:24.
+4. **Life**: pool water ripples with moving caustic light and sun glints; trees, shrubs and flowers sway in the breeze (anchored at the base, stronger at the tips); wind rolls across the meadow and the lawn; birds fly through every shot as small 3D models with flapping and gliding wings, projected through the shot's camera so they keep correct size, parallax and motion blur (white storks over the hamlet, swallows over the pool, doves above the village, a raptor along the cliffs, gulls at dusk).
+5. **Edit**: cuts land on the music's bar lines: zoom-through at 0:06, whip pan at 0:12, zoom-through at 0:18, dissolve to dusk at 0:24.
 
 | Time | Shot | Camera |
 |---|---|---|
@@ -30,7 +31,7 @@ Each render becomes a small 3D scene, and a virtual camera flies through it (2.5
 
 Limits: the camera can only move as far as each single image supports (about a metre at eye level, tens of metres in the aerial). Areas never seen in a render are inpainted, so surfaces seen edge-on (the village houses' side walls) stretch slightly during the push.
 
-Music: maqam Hijaz on D at 80 BPM (oud, ney, drone, darbuka maqsum), with wind, birds, pool water, cicadas, crickets and transition effects, all synthesized in `src/make_audio.py`.
+Music: maqam Hijaz on D at 80 BPM (oud, ney, drone, darbuka maqsum), with wind, birds, pool water, rustling leaves, cicadas, crickets and transition effects, all synthesized in `src/make_audio.py`.
 
 Titles are set in Carlito because Aptos could not be obtained in the build environment.
 
