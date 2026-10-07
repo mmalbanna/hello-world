@@ -22,7 +22,7 @@ import cv2
 import numpy as np
 
 import titles
-from shots import CAPTIONS, CUTS, END_CARD, ORDER, SHOTS
+from shots import CAPTIONS, CUTS, END_CARD, INSERTS, ORDER, SHOTS
 
 ROOT = Path(__file__).resolve().parent.parent
 FPS = 30
@@ -139,7 +139,7 @@ class Scene:
 
     def camera(self, tau, whip=True):
         c = self.cfg
-        s = ease(tau / SHOT_T, c["ease"])
+        s = ease(tau / c.get("dur", SHOT_T), c["ease"])
         p0, p1 = np.asarray(c["pos0"], float), np.asarray(c["pos1"], float)
         C = self.M @ (p0 + (p1 - p0) * s)
         T0, T1 = self.point(*c["tgt0"]), self.point(*c["tgt1"])
@@ -156,7 +156,7 @@ class Scene:
             fx["radial"] = max(fx["radial"], (1 - x) ** 2)
         if outro and outro["kind"] == "zoom":
             fwd = unit(T1 - self.M @ p1)
-            x = (tau - (SHOT_T - outro["dur"])) / outro["dur"]
+            x = (tau - (c.get("dur", SHOT_T) - outro["dur"])) / outro["dur"]
             if x > 0:
                 C, tgt = C + fwd * outro["dist"] * x ** 3, tgt + fwd * outro["dist"] * x ** 3
                 fx["radial"] = max(fx["radial"], min(x, 1.2) ** 2)
@@ -166,7 +166,7 @@ class Scene:
                 yaw = -math.radians(intro["yaw"]) * (1 - x) ** 2.5
                 fx["hblur"] = (1 - x) ** 2
         if outro and outro["kind"] == "whip":
-            x = (tau - (SHOT_T - outro["dur"])) / outro["dur"]
+            x = (tau - (c.get("dur", SHOT_T) - outro["dur"])) / outro["dur"]
             if x > 0:
                 yaw = math.radians(outro["yaw"]) * x ** 2.5
                 fx["hblur"] = min(x, 1.2) ** 2
@@ -284,6 +284,8 @@ class Scene:
 def tau_range(name):
     """Local time span in which a shot is actually rendered."""
     c = SHOTS[name]
+    if "dur" in c:
+        return -CUT_HALF, c["dur"] + CUT_HALF
     lo = -(c["intro"]["dur"] / 2 if c.get("intro", {}).get("kind") == "dissolve" else CUT_HALF) if c.get("intro") else 0.0
     hi = SHOT_T + ((c["outro"]["dur"] / 2 if c["outro"]["kind"] == "dissolve" else CUT_HALF) if c.get("outro") else 0.0)
     return lo, hi
@@ -310,6 +312,9 @@ def segments(t):
                 w *= 1 - smootherstep((t - (b - h)) / (2 * h))
         if lo <= t < hi and w > 1e-4:
             out.append((name, t - a, w))
+    for name, a, b in INSERTS:  # hard cuts on the beat
+        if a - 1e-6 <= t < b - 1e-6:
+            out = [(name, t - a, 1.0)]
     return out
 
 
@@ -340,7 +345,8 @@ class Post:
         yy, xx = np.mgrid[0:Ho, 0:Wo].astype(np.float32)
         d = np.sqrt(((xx - Wo / 2) / (Wo / 2)) ** 2 + ((yy - Ho / 2) / (Ho / 2)) ** 2)
         self.vig = (1 - 0.25 * np.clip(d - 0.55, 0, 1) ** 1.6)[..., None].astype(np.float32)
-        self.caps = [(a, b, titles.text_layer(Wo, Ho, k, l, big=(i == 0))) for i, (a, b, k, l) in enumerate(CAPTIONS)]
+        self.caps = [(c[0], c[1], titles.text_layer(Wo, Ho, c[2], c[3], big=(i == 0)), c[4] if len(c) > 4 else 0.6)
+                     for i, c in enumerate(CAPTIONS)]
         self.endl = titles.end_layer(Wo, Ho)
         self.rng = np.random.default_rng(5)
 
@@ -358,8 +364,8 @@ class Post:
         out = out + 0.3 * cv2.resize(bl, (self.Wo, self.Ho), interpolation=cv2.INTER_LINEAR)
         out = out + 0.3 * (out - cv2.GaussianBlur(out, (0, 0), 1.1))
         out = out * self.vig
-        for a, b, layer in self.caps:
-            out = titles.over(out, layer, titles.fade_in_out(t, a, b))
+        for a, b, layer, fade in self.caps:
+            out = titles.over(out, layer, titles.fade_in_out(t, a, b, fade))
         out = titles.over(out, self.endl, titles.fade_in_out(t, END_CARD[0], END_CARD[1] + 5, 0.9))
         out = out * max(0.0, min(1.0, t / 0.5, (DUR - t) / 0.8))
         dither = (self.rng.random(out.shape[:2], np.float32) - self.rng.random(out.shape[:2], np.float32))[..., None]
@@ -371,7 +377,7 @@ def cmd_zoom():
     out = ROOT / "build" / "zoom"
     out.mkdir(parents=True, exist_ok=True)
     Wo, Ho = 384, 216
-    for i, name in enumerate(ORDER):
+    for name in ORDER + [n for n, _, _ in INSERTS]:
         sc = Scene(name, 0.2)
         sc.zoom_curve = None
         lo, hi = tau_range(name)

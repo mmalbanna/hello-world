@@ -25,7 +25,8 @@ import numpy as np
 
 from flythrough import FPS, NFRAMES, SHUTTER, Post, Scene, pushpull, segments, tau_range
 import birds
-from shots import BIRDS, ORDER, SHOTS
+import person
+from shots import BIRDS, INSERTS, ORDER, SHOTS
 
 ROOT = Path(__file__).resolve().parent.parent
 GL = ROOT / "build" / "gl"
@@ -173,7 +174,8 @@ def fill_holes(rgb, a):
 
 
 def run(frames, consume, tag):
-    scenes = {n: Scene(n) for n in ORDER}
+    names = ORDER + [n for n, _, _ in INSERTS]
+    scenes = {n: Scene(n) for n in names if any(n == L for fi in frames for L, _, _ in segments(fi / FPS))}
     jobs = {"frames": [frame_job(fi, scenes) for fi in frames]}
     jf = GL / f"jobs_{tag}.json"
     jf.write_text(json.dumps(jobs))
@@ -197,6 +199,11 @@ def run(frames, consume, tag):
                 return C, R, sc.f * (W_OUT / sc.W) * sc.zoom(t) * fj["zoom"]
 
             rgb = birds.draw(rgb, sc, taus, cam_fn, BIRDS.get(L["shot"]))
+            if SHOTS[L["shot"]].get("person"):
+                blur = SHOTS[L["shot"]].get("defocus", 0)
+                if blur:
+                    rgb = cv2.GaussianBlur(rgb, (0, 0), blur) * 0.95
+                rgb = person.draw(rgb, sc, taus, cam_fn, SHOTS[L["shot"]]["person"])
             rgb = post.layer(rgb, L["shot"], L["radial"], L["hblur"])
             out = rgb * L["w"] if out is None else out + rgb * L["w"]
         consume(job["fi"], post.finish(out, job["fi"] / FPS))
@@ -207,7 +214,7 @@ def run(frames, consume, tag):
 def cmd_export():
     GL.mkdir(parents=True, exist_ok=True)
     shutil.copy(ROOT / "src" / "gl" / "renderer.html", GL / "renderer.html")
-    for name in ORDER:
+    for name in ORDER + [n for n, _, _ in INSERTS]:
         export_shot(name)
 
 

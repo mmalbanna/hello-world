@@ -66,6 +66,20 @@ SHOTS = {
 
 ORDER = ["A", "B", "C", "D", "E"]
 
+# Insert shots cut into the timeline over the main shots: (shot, start, end) s.
+# "W": Mr. Bernard welcoming the camera on the terrace, cut into the aerial
+# on the bar line at 3.0 s and out on the beat at 4.5 s.
+SHOTS["W"] = dict(
+    image=4, hfov=65, pitch=0, d_shift=0.015, z_bottom=2.2, z_max=4000.0, dur=1.5,
+    reveal_px=100, edge_ratio=0.12, water=None, clouds=False, grade="warm",
+    veg=dict(zmax=150.0, sway_world=0.12),
+    pos0=(0.0, -0.75, 0.0), pos1=(0.0, -0.75, 0.30), zoom0=3.6, zoom1=3.6,
+    tgt0=(1000, 571, (0, -0.75, 0)), tgt1=(1000, 571, (0, -0.75, 0)),
+    roll0=0.0, roll1=0.0, ease=0.5, defocus=3.5,
+    person=dict(card="build/bernard/card.npz", height_m=0.55, x=0.19, top_m=1.675, z=2.5, lean=0.04),
+)
+INSERTS = [("W", 3.0, 4.5)]
+
 # Birds: each flies through 3D points given as (source pixel u, v, distance m)
 # at shot-local times (s). kind sets size, wing shape and flight style.
 BIRDS = {
@@ -92,7 +106,8 @@ BIRDS = {
 }
 
 CAPTIONS = [
-    (0.8, 5.2, "BERNARD DOUMIT MASTER PLAN", "A Vernacular Lebanese Retreat"),
+    (0.8, 2.8, "BERNARD DOUMIT MASTER PLAN", "A Vernacular Lebanese Retreat"),
+    (3.1, 4.45, "WELCOME", "Mr. Bernard Doumit", 0.3),
     (7.0, 11.0, "MATERIAL", "Rubble-stone walls framing the pool terrace"),
     (13.0, 17.0, "ARCHITECTURE", "Dressed limestone, stone-shingle roofs, timber balconies"),
     (19.2, 23.0, "PLACE", "Arched openings and terraces beneath the cliffs"),

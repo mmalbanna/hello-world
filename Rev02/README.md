@@ -19,11 +19,13 @@ Each render becomes a small 3D scene, and a virtual camera flies through it (2.5
 2. **Layers**: the camera path of each shot is simulated to find exactly what it will uncover behind buildings and walls; LaMa inpaints that hidden background.
 3. **Rendering**: two triangle meshes per shot (foreground, cut at occlusion edges, and the inpainted background) are rasterised in WebGL2 (headless Chromium). Each frame averages 4 to 12 jittered sub-frames over a 180-degree shutter for anti-aliasing and real motion blur. Pool water ripples and clouds drift in the shader.
 4. **Life**: pool water ripples with moving caustic light and sun glints; trees, shrubs and flowers sway in the breeze (anchored at the base, stronger at the tips); wind rolls across the meadow and the lawn; birds fly through every shot as small 3D models with flapping and gliding wings, projected through the shot's camera so they keep correct size, parallax and motion blur (white storks over the hamlet, swallows over the pool, doves above the village, a raptor along the cliffs, gulls at dusk).
-5. **Edit**: cuts land on the music's bar lines: zoom-through at 0:06, whip pan at 0:12, zoom-through at 0:18, dissolve to dusk at 0:24.
+5. **Mr. Bernard**: his portrait (`source/bernard.jpg`) is cut out with ISNet, fringe-cleaned and mirrored so the photo's cropped side leaves the frame; it stands as a card in the terrace scene (image 4) at true scale, projected through the insert's camera for every shutter sample, with breathing and a slight lean toward the arriving camera. The background is rendered with the flythrough pipeline at a portrait focal length and defocused.
+6. **Edit**: cuts land on the music's bar lines: welcome insert at 0:03 to 0:04.5, zoom-through at 0:06, whip pan at 0:12, zoom-through at 0:18, dissolve to dusk at 0:24.
 
 | Time | Shot | Camera |
 |---|---|---|
 | 0:00 to 0:06 | Aerial over the ridge hamlet | Drone glide forward and down with a slight bank, ends in a zoom-through |
+| 0:03 to 0:04.5 | Mr. Bernard welcomes the camera (insert) | Cut in on the bar line to a head-and-shoulders shot of Mr. Bernard Doumit on the terrace, camera pushing in, cut back on the beat |
 | 0:06 to 0:12 | Stone wall and pool | Arc around the wall with a slow push, ends in a whip pan |
 | 0:12 to 0:18 | Village lane | Push between the two houses toward the citadel, ends in a zoom-through |
 | 0:18 to 0:24 | Cliffside pool terrace | Arc across the pool toward the house |
