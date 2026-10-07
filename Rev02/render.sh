@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Rebuilds the Rev02 flythrough from source/*.webp.
 #
-# Needs: python3 with numpy, Pillow, opencv-contrib-python-headless, onnxruntime, torch;
+# Needs: python3 with numpy, Pillow, opencv-contrib-python-headless, onnxruntime, torch, mediapipe (libegl1);
 #        node with Playwright and its Chromium; ffmpeg with libx264.
 # Models, downloaded once into $MODELS (default /home/user/models):
 #   https://github.com/fabio-sim/Depth-Anything-ONNX/releases/download/v2.0.0/depth_anything_v2_vitl_dynamic.onnx
 #   https://github.com/Sanster/models/releases/download/add_big_lama/big-lama.pt
+#   https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx
+#   https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
 set -euo pipefail
 cd "$(dirname "$0")"
 export MODELS=${MODELS:-/home/user/models}
@@ -15,6 +17,7 @@ VOPTS=(-c:v libx264 -preset slow -b:v 3800k -maxrate 5000k -bufsize 7600k -profi
 
 mkdir -p build/depth
 python3 src/depth.py "$MODELS/depth_anything_v2_vitl_dynamic.onnx" build/depth source/{1,2,3,4,5}.webp
+python3 src/prep_person.py source/bernard.jpg build/bernard
 python3 src/prep_scenes.py
 python3 src/flythrough.py zoom
 python3 src/glrender.py export

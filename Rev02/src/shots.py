@@ -76,7 +76,7 @@ SHOTS["W"] = dict(
     pos0=(0.0, -0.75, 0.0), pos1=(0.0, -0.75, 0.30), zoom0=3.6, zoom1=3.6,
     tgt0=(1000, 571, (0, -0.75, 0)), tgt1=(1000, 571, (0, -0.75, 0)),
     roll0=0.0, roll1=0.0, ease=0.5, defocus=3.5,
-    person=dict(card="build/bernard/card.npz", height_m=0.55, x=0.19, top_m=1.675, z=2.5, lean=0.04),
+    person=dict(card="build/bernard/card.npz", landmarks="build/bernard/landmarks.npy", height_m=0.55, x=0.19, top_m=1.675, z=2.5, lean=0.04),
 )
 INSERTS = [("W", 3.0, 4.5)]
 
